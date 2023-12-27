@@ -1,5 +1,5 @@
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -11,8 +11,181 @@ generator client {
 // Define your own datamodels here and run `yarn redwood prisma migrate dev`
 // to create migrations for them and apply to your dev DB.
 // TODO: Please remove the following example:
-model UserExample {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
+
+model User {
+  id                     Int              @id @default(autoincrement())
+  email                  String           @unique
+  name                   String?
+  hashedPassword         String?
+  salt                   String?
+  googleId               String?
+  resetToken             String?
+  resetTokenExpiresAt    DateTime?
+  webAuthnChallenge      String?
+  emailVerified          Boolean          @default(false)
+  emailVerificationToken String?
+  accountCreatedAt       DateTime         @default(now())
+  preferredCurrency      String           @default("USD")
+  clubMemberships        ClubMembership[]
+  wallets                Wallet[]
+  credentials            UserCredential[]
+  tickets                Ticket[]         @relation("ownedTickets")
+  // issuedTickets          Ticket[]         @relation("issuedTickets")
+  gameInvitation         GameInvitation[]
+  organization           Organization?    @relation(fields: [organizationId], references: [id])
+  organizationId         Int?
+  notification           Notification[]
+}
+
+model UserCredential {
+  id         String  @id
+  userId     Int
+  user       User    @relation(fields: [userId], references: [id])
+  publicKey  Bytes
+  transports String?
+  counter    BigInt
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  type      String?
+  message   String?
+  createdAt DateTime @default(now())
+  read      Boolean  @default(false)
+}
+
+model WalletTransaction {
+  id          Int      @id @default(autoincrement())
+  value       Float
+  description String
+  createdAt   DateTime @default(now())
+  wallet      Wallet   @relation(fields: [walletId], references: [id])
+  walletId    Int
+}
+
+model Wallet {
+  id                 Int                 @id @default(autoincrement())
+  user               User                @relation(fields: [userId], references: [id])
+  userId             Int
+  walletTransactions WalletTransaction[]
+  club               Club?               @relation(fields: [clubId], references: [id])
+  organization       Organization?       @relation(fields: [organizationId], references: [id])
+  organizationId     Int?
+  clubId             Int?
+  currency           String?
+}
+
+model Club {
+  id             Int              @id @default(autoincrement())
+  name           String
+  description    String
+  memberships    ClubMembership[]
+  organization   Organization?    @relation(fields: [organizationId], references: [id])
+  organizationId Int?
+  privacy        ClubPrivacy      @default(PUBLIC)
+  wallets        Wallet[]
+}
+
+enum ClubPrivacy {
+  PUBLIC // anyone can join
+  INVITEONLYVISIBLE // only if an admin has invited you, but anyone can see the club
+  INVITEONLYSECRET // only if an admin has invited you, and only members can see the club
+  ONREFERRAL // only if a member has referred you
+  ONREQUEST // the public may request to join
+}
+
+model ClubMembership {
+  id     Int                  @id @default(autoincrement())
+  user   User                 @relation(fields: [userId], references: [id])
+  club   Club                 @relation(fields: [clubId], references: [id])
+  roles  ClubMembershipRole[] @default([MEMBER])
+  userId Int
+  clubId Int
+}
+
+enum ClubMembershipRole {
+  OWNER
+  BILLINGADMIN
+  GAMEADMIN
+  MEMBER
+}
+
+model Game {
+  id              Int              @id @default(autoincrement())
+  location        String?
+  series          GameSerie?       @relation(fields: [gameSerieId], references: [id])
+  gameSerieId     Int?
+  room            Room?            @relation(fields: [roomId], references: [id])
+  roomId          Int?
+  gameType        GameType         @default(CASH)
+  ticketingPolicy TicketingPolicy  @default(INVITEONLY)
+  status          GameStatus       @default(DRAFT)
+  gameInvitation  GameInvitation[]
+}
+
+enum GameStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+}
+
+enum TicketingPolicy {
+  INVITEONLY
+  PUBLIC
+  ONREQUEST
+  UNTICKETED
+}
+
+model GameInvitation {
+  id       Int                  @id @default(autoincrement())
+  game     Game                 @relation(fields: [gameId], references: [id])
+  gameId   Int
+  user     User?                @relation(fields: [userId], references: [id])
+  userId   Int?
+  status   GameInvitationStatus @default(PENDING)
+  ticket   Ticket?              @relation(fields: [ticketId], references: [id])
+  ticketId Int?
+}
+
+enum GameInvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum GameType {
+  CASH
+  TOURNAMENT
+  OTHER
+}
+
+model Organization {
+  id      Int      @id @default(autoincrement())
+  clubs   Club[]
+  wallet  Wallet[]
+  members User[]
+}
+
+model GameSerie {
+  id    Int    @id @default(autoincrement())
+  name  String
+  games Game[]
+}
+
+model Room {
+  id       Int    @id @default(autoincrement())
+  location String
+  games    Game[]
+  status   String @default("OPEN")
+}
+
+model Ticket {
+  id             Int              @id @default(autoincrement())
+  // issuingUser    User             @relation(fields: [issuingUserId], references: [id], name: "issuedTickets")
+  issuingUserId  Int
+  owner          User             @relation(fields: [ownerId], references: [id], name: "ownedTickets")
+  ownerId        Int
+  gameInvitation GameInvitation[]
 }
