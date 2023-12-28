@@ -15,7 +15,7 @@ export const schema = gql`
     preferredCurrency: String!
     clubMemberships: [ClubMembership]!
     wallets: [Wallet]!
-    credentials: [UserCredential]!
+
     tickets: [Ticket]!
     gameInvitation: [GameInvitation]!
     organization: Organization
